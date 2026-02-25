@@ -211,3 +211,16 @@ _bmad
 .agent
 .claude
 .gemini
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/terraform.tfvars
+
+# Local data (dev mode)
+bronze/
+
+# Azure Functions
+local.settings.json

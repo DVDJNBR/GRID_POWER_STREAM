@@ -1,0 +1,21 @@
+[project]
+name = "watt-watcher"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "azure-functions>=1.24.0",
+    "azure-identity>=1.25.2",
+    "azure-keyvault-secrets>=4.10.0",
+    "azure-storage-file-datalake>=12.23.0",
+    "parsel>=1.11.0",
+    "polars>=1.38.1",
+    "requests>=2.32.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-mock>=3.15.1",
+]

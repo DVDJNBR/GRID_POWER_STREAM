@@ -11,6 +11,7 @@ dependencies = [
     "azure-storage-file-datalake>=12.23.0",
     "parsel>=1.11.0",
     "polars>=1.38.1",
+    "pyarrow>=23.0.1",
     "requests>=2.32.5",
 ]
 

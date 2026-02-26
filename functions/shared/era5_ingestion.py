@@ -13,10 +13,8 @@ Key design decisions:
 
 import json
 import logging
-import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 
@@ -176,7 +174,7 @@ class ERA5Ingestion:
                 & (pl.col("valid_time") < next_month)
             )
 
-            result = self.ingest_parquet.__wrapped__(self, chunk_lf, output_dir) if hasattr(self.ingest_parquet, '__wrapped__') else self._process_lazy_frame(chunk_lf, output_dir)
+            result = self._process_lazy_frame(chunk_lf, output_dir)
 
             total_rows += result["total_rows"]
             total_files += result["files_written"]

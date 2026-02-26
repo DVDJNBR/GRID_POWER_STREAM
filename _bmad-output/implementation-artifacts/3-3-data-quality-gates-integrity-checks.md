@@ -1,6 +1,6 @@
 # Story 3.3: Data Quality Gates & Integrity Checks
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -98,10 +98,29 @@ gates:
 
 ### Agent Model Used
 
+Antigravity (Amelia 💻)
+
 ### Debug Log References
+
+`pytest`: 15/15 quality gate tests pass (0.21s). Full suite: 110 tests.
 
 ### Completion Notes List
 
+- 6 check types: null_check, range_check, row_count (±5% tolerance), freshness, fk_integrity, facteur_charge_range
+- Config-driven gate runner: loads checks from `quality_gates.json` (AC #3)
+- 3 severity levels: CRITICAL (halt pipeline), WARNING (log+continue), INFO
+- Silver checks: mandatory fields non-null, MW range 0–100k, data freshness
+- Gold checks: FK integrity (no orphans), facteur_charge between 0–1.5
+- Programmatic API also available for inline checks
+
 ### File List
 
+- `functions/shared/quality/__init__.py` — [NEW] Package init
+- `functions/shared/quality/checks.py` — [NEW] 6 check implementations
+- `functions/shared/quality/gate_runner.py` — [NEW] Config-driven runner
+- `config/quality_gates.json` — [NEW] 5 declarative gate definitions
+- `tests/test_quality_gates.py` — [NEW] 15 tests
+
 ### Change Log
+
+- 2026-02-26: Story completed. 15/15 tests pass.

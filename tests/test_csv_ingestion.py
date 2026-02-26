@@ -1,13 +1,13 @@
 """Tests for csv_ingestion.py — Story 1.2, Task 3"""
 
-import json
+
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from functions.shared.bronze_storage import BronzeStorage
-from functions.shared.csv_ingestion import CSVIngestion, CSVValidationError
+from functions.shared.csv_ingestion import CSVIngestion
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ class TestCSVIngestionValid:
 
     def test_ingest_valid_file(self, ingestion, sample_csv_path):
         """Valid CSV is ingested successfully."""
-        result = ingestion.ingest_file(sample_csv_path)
+        result = ingestion.ingest_file(sample_csv_path)  # noqa: F841
         ingestion.audit.log_success.assert_called_once()
         call_kwargs = ingestion.audit.log_success.call_args
         assert call_kwargs[1]["record_count"] == 16
@@ -63,7 +63,7 @@ class TestCSVIngestionErrors:
         """Empty CSV triggers validation error."""
         empty = tmp_path / "empty.csv"
         empty.write_text("", encoding="utf-8")
-        result = ingestion.ingest_file(empty)
+        result = ingestion.ingest_file(empty)  # noqa: F841
         ingestion.audit.log_failure.assert_called_once()
         assert "empty" in ingestion.audit.log_failure.call_args[1]["error"].lower()
 
@@ -73,7 +73,7 @@ class TestCSVIngestionErrors:
         headers_only.write_text(
             "code_insee_region,puissance_installee_mw\n", encoding="utf-8"
         )
-        result = ingestion.ingest_file(headers_only)
+        result = ingestion.ingest_file(headers_only)  # noqa: F841
         ingestion.audit.log_failure.assert_called_once()
 
     def test_missing_required_column(self, ingestion, tmp_path):
@@ -82,7 +82,7 @@ class TestCSVIngestionErrors:
         bad_csv.write_text(
             "region,valeur\n11,100\n24,200\n", encoding="utf-8"
         )
-        result = ingestion.ingest_file(bad_csv)
+        result = ingestion.ingest_file(bad_csv)  # noqa: F841
         ingestion.audit.log_failure.assert_called_once()
         error_msg = ingestion.audit.log_failure.call_args[1]["error"]
         assert "required" in error_msg.lower()

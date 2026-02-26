@@ -11,7 +11,6 @@ Supports both Azure SQL (pyodbc) and local SQLite for development.
 import logging
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)

@@ -72,7 +72,7 @@ class EmissionsClient:
             self._save_checksum(new_checksum)
 
             # Count records
-            lines = [l for l in content.strip().split("\n") if l.strip()]
+            lines = [line for line in content.strip().split("\n") if line.strip()]
             record_count = max(0, len(lines) - 1)  # minus header
 
             logger.info("Emission factors ingested: %d records → %s", record_count, path)
@@ -116,7 +116,7 @@ class EmissionsClient:
         path = self._write_to_bronze(content)
         self._save_checksum(new_checksum)
 
-        lines = [l for l in content.strip().split("\n") if l.strip()]
+        lines = [line for line in content.strip().split("\n") if line.strip()]
         record_count = max(0, len(lines) - 1)
 
         logger.info("Emission factors ingested from file: %d records", record_count)

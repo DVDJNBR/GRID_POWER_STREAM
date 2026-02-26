@@ -1,6 +1,6 @@
 # Story 3.2: Silver to Gold — Relational Serving & Reconciliation (C11, C14)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -102,10 +102,31 @@ DIM_SOURCE (id_source, source_name, is_green)
 
 ### Agent Model Used
 
+Antigravity (Amelia 💻)
+
 ### Debug Log References
+
+`pytest`: 11/11 Gold tests pass (0.26s). Full suite: 95/95 (1.04s)
 
 ### Completion Notes List
 
+- Star Schema: DIM_REGION, DIM_TIME, DIM_SOURCE, FACT_ENERGY_FLOW
+- DIM upserts with ON CONFLICT (SQLite) / MERGE (SQL Server) — idempotent
+- FACT_ENERGY_FLOW: unpivots wide Silver format → long fact rows
+- Facteur de charge = valeur_mw / puissance_installee (AC #2)
+- FK integrity enforced (all FACT rows reference valid DIMs)
+- Weekend detection in DIM_TIME for analytics
+- RBAC: gold_reader (SELECT-only) / gold_writer roles
+- SQLite local dev mode (no Azure SQL needed for testing)
+
 ### File List
 
+- `functions/shared/gold/__init__.py` — [NEW] Package init
+- `functions/shared/gold/dim_loader.py` — [NEW] DIM upsert loader
+- `functions/shared/gold/fact_loader.py` — [NEW] FACT loader with FK resolution
+- `infra/sql/rbac_setup.sql` — [NEW] RBAC roles (NFR-S3)
+- `tests/test_gold_loader.py` — [NEW] 11 tests
+
 ### Change Log
+
+- 2026-02-26: Story completed. 11/11 tests pass.

@@ -224,3 +224,6 @@ bronze/
 
 # Azure Functions
 local.settings.json
+
+# Node (semantic-release)
+node_modules/

@@ -1,6 +1,6 @@
 # Story 2.1: Web Scraping of Grid Maintenance Portals
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -87,10 +87,27 @@ bronze/
 
 ### Agent Model Used
 
+Antigravity (Amelia 💻)
+
 ### Debug Log References
+
+`pytest`: 11/11 scraper tests pass (0.23s)
 
 ### Completion Notes List
 
+- RTE transparency portal returns 404 (page migrated) — used HTML fixture per story fallback guidance
+- HTML fixture demonstrates realistic maintenance events (nuclear VD, wind offshore, gas turbine)
+- Both CSS selectors and XPath demonstrated for C8 competency
+- Politeness delay (2s) and retry logic with exponential backoff
+- Dual-mode: live URL scraping or local file parsing
+- `parsel` used (not BeautifulSoup, per user preference)
+
 ### File List
 
+- `functions/shared/maintenance_scraper.py` — [NEW] Scraper module (parsel)
+- `tests/test_maintenance_scraper.py` — [NEW] 11 tests
+- `tests/fixtures/rte_maintenance_page.html` — [NEW] Realistic HTML fixture (6 events)
+
 ### Change Log
+
+- 2026-02-26: Story completed. 11/11 tests pass.

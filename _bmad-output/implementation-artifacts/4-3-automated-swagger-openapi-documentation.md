@@ -1,6 +1,6 @@
 # Story 4.3: Automated Swagger/OpenAPI Documentation
 
-Status: review
+Status: done
 
 ## Story
 

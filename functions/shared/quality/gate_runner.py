@@ -8,11 +8,8 @@ Reports results to audit logger.
 
 import json
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-import polars as pl
 
 from functions.shared.quality.checks import (
     CheckStatus,

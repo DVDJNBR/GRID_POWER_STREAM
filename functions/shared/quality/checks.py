@@ -6,8 +6,7 @@ Each returns a CheckResult dict with: name, status (PASS/FAIL/WARN), details.
 """
 
 import logging
-import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -162,15 +161,24 @@ def freshness_check(
 
     # Convert to datetime if needed
     if isinstance(max_ts, str):
-        max_ts = datetime.fromisoformat(max_ts.replace("Z", "+00:00"))
+        max_ts_dt = datetime.fromisoformat(max_ts.replace("Z", "+00:00"))
+    elif isinstance(max_ts, datetime):
+        max_ts_dt = max_ts
+    else:
+        return {
+            "name": name,
+            "check_type": "freshness",
+            "status": CheckStatus.FAIL.value,
+            "details": {"error": f"Unsupported timestamp type: {type(max_ts).__name__}"},
+        }
 
     # Make timezone-aware if needed
-    if max_ts.tzinfo is None:
-        max_ts = max_ts.replace(tzinfo=timezone.utc)
+    if max_ts_dt.tzinfo is None:
+        max_ts_dt = max_ts_dt.replace(tzinfo=timezone.utc)
     if ref.tzinfo is None:
         ref = ref.replace(tzinfo=timezone.utc)
 
-    age = ref - max_ts
+    age = ref - max_ts_dt
     age_hours = age.total_seconds() / 3600
 
     if age_hours <= max_age_hours:
@@ -185,7 +193,7 @@ def freshness_check(
         "check_type": "freshness",
         "status": status.value,
         "details": {
-            "latest_timestamp": str(max_ts),
+            "latest_timestamp": str(max_ts_dt),
             "age_hours": round(age_hours, 2),
             "max_age_hours": max_age_hours,
         },

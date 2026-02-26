@@ -1,6 +1,6 @@
 # Story 2.3: Government Emission Factor Ingestion (Open Data)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -68,10 +68,26 @@ so that we can calculate carbon intensity metrics in the Gold layer.
 
 ### Agent Model Used
 
+Antigravity (Amelia 💻)
+
 ### Debug Log References
+
+`pytest`: 8/8 emissions tests pass (0.16s)
 
 ### Completion Notes List
 
+- Source: ADEME Base Carbone via data.ademe.fr API
+- Conditional fetch via SHA-256 checksum (AC #3) — skips if data unchanged
+- Dual-mode: URL download or local file ingestion
+- Fixture: 12 sources (nucléaire 6 kg/MWh → charbon 1060 kg/MWh)
+- Raw CSV preserved as-is in Bronze (AC #2)
+
 ### File List
 
+- `functions/shared/emissions_client.py` — [NEW] Emission factor client
+- `tests/test_emissions_client.py` — [NEW] 8 tests
+- `tests/fixtures/emission_factors_sample.csv` — [NEW] ADEME fixture (12 sources)
+
 ### Change Log
+
+- 2026-02-26: Story completed. 8/8 tests pass.

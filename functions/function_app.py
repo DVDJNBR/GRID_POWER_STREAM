@@ -28,6 +28,7 @@ from shared.api.production_service import query_production
 from shared.api.export_service import export_to_csv
 from shared.api.error_handlers import bad_request, not_found, server_error
 from shared.api.routes import ROUTE_PRODUCTION, ROUTE_EXPORT
+from shared.api.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ if AZURE_FUNCTIONS_AVAILABLE:
     # ── Story 4.1: Production regional endpoint ──────────────────────────────
 
     @app.route(route=ROUTE_PRODUCTION, methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+    @require_auth
     def get_production_regional(req: func.HttpRequest) -> func.HttpResponse:
         """
         GET /v1/production/regional
@@ -131,6 +133,7 @@ if AZURE_FUNCTIONS_AVAILABLE:
     # ── Story 4.1: CSV export endpoint ──────────────────────────────────────
 
     @app.route(route=ROUTE_EXPORT, methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+    @require_auth
     def get_export_csv(req: func.HttpRequest) -> func.HttpResponse:
         """
         GET /v1/export/csv

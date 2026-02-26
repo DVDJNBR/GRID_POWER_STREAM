@@ -1,6 +1,6 @@
 # Story 3.1: Bronze to Silver — Data Cleaning & Partitioning
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -128,10 +128,31 @@ tests/
 
 ### Agent Model Used
 
+Antigravity (Amelia 💻)
+
 ### Debug Log References
+
+`pytest`: 17/17 Silver tests pass (0.27s)
 
 ### Completion Notes List
 
+- 5 Silver transformation modules: rte, capacity, maintenance, era5, data_quality
+- Data quality framework with 4 null strategies: DROP, FILL_ZERO, FORWARD_FILL, FLAG
+- RTE: dedup on (code_insee_region, date_heure), pompage/stockage cast Str→Float64
+- Hive-partitioned Parquet output: `year=YYYY/month=MM/day=DD/`
+- Fixed Polars 1.25+ strict timezone parsing (`time_zone="UTC"`)
+- Modular: each source has its own transformation module
+
 ### File List
 
+- `functions/shared/transformations/__init__.py` — [NEW] Package init
+- `functions/shared/transformations/data_quality.py` — [NEW] Null handling framework
+- `functions/shared/transformations/rte_silver.py` — [NEW] RTE Bronze→Silver
+- `functions/shared/transformations/capacity_silver.py` — [NEW] Capacity CSV→Silver
+- `functions/shared/transformations/maintenance_silver.py` — [NEW] Maintenance JSON→Silver
+- `functions/shared/transformations/era5_silver.py` — [NEW] ERA5 Parquet→Silver
+- `tests/test_transformations.py` — [NEW] 17 tests
+
 ### Change Log
+
+- 2026-02-26: Story completed. 17/17 tests pass.

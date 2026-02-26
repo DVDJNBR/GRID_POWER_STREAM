@@ -3,6 +3,7 @@ GRID_POWER_STREAM — Azure Function App Entry Point
 
 Story 1.1: Timer trigger — RTE eCO2mix ingestion → Bronze layer.
 Story 4.1: HTTP triggers — /v1/production/regional, /v1/export/csv.
+Story 4.3: HTTP triggers — /health, /docs, /openapi.json.
 """
 
 import json
@@ -27,8 +28,9 @@ from shared.api.models import parse_production_request, parse_export_request
 from shared.api.production_service import query_production
 from shared.api.export_service import export_to_csv
 from shared.api.error_handlers import bad_request, not_found, server_error
-from shared.api.routes import ROUTE_PRODUCTION, ROUTE_EXPORT
+from shared.api.routes import ROUTE_PRODUCTION, ROUTE_EXPORT, ROUTE_HEALTH, ROUTE_DOCS, ROUTE_OPENAPI_JSON
 from shared.api.auth import require_auth
+from shared.api.openapi_spec import build_spec, build_swagger_ui_html
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +131,42 @@ if AZURE_FUNCTIONS_AVAILABLE:
                 mimetype="application/json",
                 headers={"X-Request-Id": request_id},
             )
+
+    # ── Story 4.3: Health check (public) ────────────────────────────────────
+
+    @app.route(route=ROUTE_HEALTH, methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+    def get_health(req: func.HttpRequest) -> func.HttpResponse:
+        """GET /health — liveness probe, no auth required."""
+        from shared.api.openapi_spec import API_VERSION as _API_VERSION
+        return func.HttpResponse(
+            json.dumps({"status": "healthy", "version": _API_VERSION}),
+            status_code=200,
+            mimetype="application/json",
+        )
+
+    # ── Story 4.3: OpenAPI JSON spec (public) ────────────────────────────────
+
+    @app.route(route=ROUTE_OPENAPI_JSON, methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+    def get_openapi_json(req: func.HttpRequest) -> func.HttpResponse:
+        """GET /openapi.json — serves the OpenAPI 3.0.3 spec."""
+        return func.HttpResponse(
+            json.dumps(build_spec(), indent=2),
+            status_code=200,
+            mimetype="application/json",
+            headers={"Cache-Control": "max-age=300"},
+        )
+
+    # ── Story 4.3: Swagger UI (public) ───────────────────────────────────────
+
+    @app.route(route=ROUTE_DOCS, methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+    def get_docs(req: func.HttpRequest) -> func.HttpResponse:
+        """GET /docs — Swagger UI HTML, loads spec from /api/openapi.json."""
+        html = build_swagger_ui_html(openapi_json_url="/api/openapi.json")
+        return func.HttpResponse(
+            html,
+            status_code=200,
+            mimetype="text/html; charset=utf-8",
+        )
 
     # ── Story 4.1: CSV export endpoint ──────────────────────────────────────
 

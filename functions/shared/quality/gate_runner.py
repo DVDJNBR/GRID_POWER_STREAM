@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from functions.shared.quality.checks import (
+from functions.shared.quality.checks import (  # type: ignore
     CheckStatus,
     Severity,
     fk_integrity_check,
@@ -25,10 +25,9 @@ from functions.shared.quality.checks import (
 logger = logging.getLogger(__name__)
 
 try:
-    import yaml
+    import yaml  # type: ignore
     HAS_YAML = True
 except ImportError:
-    yaml = None  # type: ignore[assignment]
     HAS_YAML = False
 
 
@@ -72,7 +71,7 @@ class GateRunner:
             return []
 
         if HAS_YAML:
-            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))  # type: ignore
         else:
             # Fallback: try JSON format
             config = json.loads(config_path.read_text(encoding="utf-8"))

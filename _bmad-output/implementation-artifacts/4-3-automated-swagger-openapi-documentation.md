@@ -1,6 +1,6 @@
 # Story 4.3: Automated Swagger/OpenAPI Documentation
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -24,30 +24,30 @@ so that I can easily test the endpoints and understand the data schema.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: OpenAPI spec generation (AC: #1, #2)
-  
-  - [ ] 1.1: Create `shared/api/openapi_spec.py` — programmatically generate OpenAPI 3.0 spec
-  - [ ] 1.2: Document all endpoints: `/v1/production/regional`, `/v1/export/csv`, `/health`
-  - [ ] 1.3: Define request parameter schemas (query params with types, descriptions, examples)
-  - [ ] 1.4: Define response schemas (JSON structure, field descriptions, example values)
+- [x] Task 1: OpenAPI spec generation (AC: #1, #2)
 
-- [ ] Task 2: Swagger UI integration (AC: #1)
-  
-  - [ ] 2.1: Create HTTP-triggered function serving Swagger UI at `/docs` or `/api/docs`
-  - [ ] 2.2: Use `swagger-ui-dist` CDN or embed static HTML with Swagger UI
-  - [ ] 2.3: Serve OpenAPI spec JSON at `/api/openapi.json`
+  - [x] 1.1: Create `shared/api/openapi_spec.py` — programmatically generate OpenAPI 3.0 spec
+  - [x] 1.2: Document all endpoints: `/v1/production/regional`, `/v1/export/csv`, `/health`
+  - [x] 1.3: Define request parameter schemas (query params with types, descriptions, examples)
+  - [x] 1.4: Define response schemas (JSON structure, field descriptions, example values)
 
-- [ ] Task 3: Security documentation (AC: #3)
-  
-  - [ ] 3.1: Add `securitySchemes` to OpenAPI spec: Bearer JWT via Azure AD
-  - [ ] 3.2: Mark protected endpoints with security requirement
-  - [ ] 3.3: Include token acquisition instructions in API description
+- [x] Task 2: Swagger UI integration (AC: #1)
 
-- [ ] Task 4: Tests (AC: #1, #2, #3)
-  
-  - [ ] 4.1: Validate generated OpenAPI spec against OpenAPI 3.0 schema
-  - [ ] 4.2: Test Swagger UI endpoint returns HTML with correct spec URL
-  - [ ] 4.3: Verify all defined endpoints exist in spec
+  - [x] 2.1: Create HTTP-triggered function serving Swagger UI at `/docs`
+  - [x] 2.2: Use `swagger-ui-dist@5` CDN — no bundled assets
+  - [x] 2.3: Serve OpenAPI spec JSON at `/api/openapi.json`
+
+- [x] Task 3: Security documentation (AC: #3)
+
+  - [x] 3.1: Add `securitySchemes` to OpenAPI spec: BearerAuth JWT via Azure AD
+  - [x] 3.2: Mark protected endpoints with `security: [{BearerAuth: []}]`
+  - [x] 3.3: Include token acquisition instructions in API description
+
+- [x] Task 4: Tests (AC: #1, #2, #3)
+
+  - [x] 4.1: Validate generated OpenAPI spec against OpenAPI 3.0 schema (structural)
+  - [x] 4.2: Test Swagger UI HTML — CDN, mount point, title, spec URL
+  - [x] 4.3: Verify all defined endpoints exist in spec with correct params/schemas
 
 ## Dev Notes
 
@@ -72,10 +72,29 @@ so that I can easily test the endpoints and understand the data schema.
 
 ### Agent Model Used
 
+claude-sonnet-4-6
+
 ### Debug Log References
+
+_aucun blocage_
 
 ### Completion Notes List
 
+- `shared/api/openapi_spec.py` : `build_spec()` génère OpenAPI 3.0.3 complet ; `build_swagger_ui_html()` retourne le HTML CDN
+- `routes.py` : `ROUTE_DOCS`, `ROUTE_OPENAPI_JSON` ajoutés ; `PUBLIC_ROUTES` étendu aux 3 routes publiques
+- `function_app.py` : 3 nouveaux HTTP triggers — GET `/health` (200 + version), GET `/openapi.json` (JSON spec), GET `/docs` (Swagger UI HTML)
+- Spec couvre : info, servers, tags, 3 paths avec params/schemas/examples, components (BearerAuth + 3 schemas)
+- Endpoints protégés (`/v1/*`) marqués `security: [{BearerAuth: []}]` ; `/health` marqué `security: []`
+- 40 tests dans `tests/test_openapi.py` : structure spec, couverture endpoints, paramètres, schémas, sécurité, Swagger UI HTML, classification routes
+- 228 tests passés total, 0 régression
+
 ### File List
 
+- `functions/shared/api/openapi_spec.py` [NEW]
+- `functions/shared/api/routes.py` [MODIFIED — ROUTE_DOCS, ROUTE_OPENAPI_JSON, PUBLIC_ROUTES étendu]
+- `functions/function_app.py` [MODIFIED — 3 HTTP triggers: health, openapi.json, docs]
+- `tests/test_openapi.py` [NEW]
+
 ### Change Log
+
+- 2026-02-26: Story 4.3 implémentée — OpenAPI 3.0.3 spec, Swagger UI, /health, 40 tests, 228 total

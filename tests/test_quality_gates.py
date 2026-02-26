@@ -8,14 +8,14 @@ import polars as pl
 import pytest
 
 from functions.shared.gold.dim_loader import DimLoader
-from functions.shared.quality.checks import (
+from functions.shared.quality.checks import (  # type: ignore
     fk_integrity_check,
     freshness_check,
     null_check,
     range_check,
     row_count_check,
 )
-from functions.shared.quality.gate_runner import GateRunner
+from functions.shared.quality.gate_runner import GateRunner  # type: ignore
 
 
 CONFIG_PATH = Path("config/quality_gates.json")

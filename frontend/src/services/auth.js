@@ -13,7 +13,7 @@ const msalConfig = {
     redirectUri: import.meta.env.VITE_REDIRECT_URI || window.location.origin,
   },
   cache: {
-    cacheLocation:       'sessionStorage',
+    cacheLocation:          'sessionStorage',
     storeAuthStateInCookie: false,
   },
 }
@@ -23,11 +23,19 @@ const loginRequest = {
 }
 
 let _msalInstance = null
+let _initialized = false
 
-/** Return (or create) the singleton MSAL PublicClientApplication. */
-export function getMsalInstance() {
+/**
+ * Return (or create) the singleton MSAL PublicClientApplication.
+ * Calls initialize() exactly once — subsequent calls are no-ops.
+ */
+export async function getMsalInstance() {
   if (!_msalInstance) {
     _msalInstance = new PublicClientApplication(msalConfig)
+  }
+  if (!_initialized) {
+    await _msalInstance.initialize()
+    _initialized = true
   }
   return _msalInstance
 }
@@ -35,17 +43,17 @@ export function getMsalInstance() {
 /** Reset MSAL instance (used in tests). */
 export function _resetMsalInstance() {
   _msalInstance = null
+  _initialized = false
 }
 
 /**
  * Acquire a Bearer token silently; fall back to interaction if needed.
  * AC #4: Seamless SSO — silent acquisition first.
  *
- * @returns {Promise<string>} Access token
+ * @returns {Promise<string>} Access token, or '' if redirect was triggered
  */
 export async function acquireToken() {
-  const msal = getMsalInstance()
-  await msal.initialize()
+  const msal = await getMsalInstance()
 
   const accounts = msal.getAllAccounts()
   if (!accounts.length) {
@@ -61,6 +69,7 @@ export async function acquireToken() {
   } catch (err) {
     if (err instanceof InteractionRequiredAuthError) {
       await msal.acquireTokenRedirect(silentRequest)
+      return ''
     }
     throw err
   }
@@ -69,8 +78,8 @@ export async function acquireToken() {
 /**
  * Return the currently signed-in account, or null.
  */
-export function getCurrentAccount() {
-  const msal = getMsalInstance()
+export async function getCurrentAccount() {
+  const msal = await getMsalInstance()
   const accounts = msal.getAllAccounts()
   return accounts[0] ?? null
 }
@@ -79,8 +88,7 @@ export function getCurrentAccount() {
  * Sign out the current user.
  */
 export async function signOut() {
-  const msal = getMsalInstance()
-  await msal.initialize()
-  const account = getCurrentAccount()
+  const msal = await getMsalInstance()
+  const account = await getCurrentAccount()
   await msal.logoutRedirect({ account })
 }

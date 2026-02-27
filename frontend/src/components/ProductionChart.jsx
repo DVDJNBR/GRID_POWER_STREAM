@@ -44,6 +44,22 @@ export function transformProductionData(records) {
   }))
 }
 
+/**
+ * Derive the union of all source keys across every record.
+ * Ensures sources appearing in later records are not missed.
+ * @param {Array} chartData - transformed data rows
+ * @returns {string[]}
+ */
+function deriveAllSources(chartData) {
+  const seen = new Set()
+  for (const row of chartData) {
+    for (const key of Object.keys(row)) {
+      if (key !== 'timestamp') seen.add(key)
+    }
+  }
+  return Array.from(seen)
+}
+
 /** @param {{ data: Array, loading?: boolean, error?: string|null }} props */
 export function ProductionChart({ data, loading = false, error = null }) {
   if (loading) {
@@ -63,9 +79,7 @@ export function ProductionChart({ data, loading = false, error = null }) {
   }
 
   const chartData = transformProductionData(data)
-  const sources = chartData.length > 0
-    ? Object.keys(chartData[0]).filter(k => k !== 'timestamp')
-    : []
+  const sources = deriveAllSources(chartData)
 
   return (
     <section className="glass-card chart-card" data-testid="production-chart">
@@ -80,12 +94,16 @@ export function ProductionChart({ data, loading = false, error = null }) {
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#888888" strokeOpacity={0.2} />
           <XAxis dataKey="timestamp" tick={{ fill: '#8b9ab5', fontSize: 11 }} />
           <YAxis tick={{ fill: '#8b9ab5', fontSize: 11 }} unit=" MW" width={70} />
           <Tooltip
-            contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-            labelStyle={{ color: '#f0f4ff' }}
+            contentStyle={{
+              background: 'var(--color-surface-2)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '8px',
+            }}
+            labelStyle={{ color: 'var(--color-text)' }}
           />
           <Legend formatter={name => SOURCE_LABELS[name] || name} />
           {sources.map(source => (

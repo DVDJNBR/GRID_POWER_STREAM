@@ -40,12 +40,10 @@ async function authGet(path, params = {}) {
   const qs = buildQueryString(params)
   const url = `${API_BASE}${path}${qs}`
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : '',
-      'Content-Type': 'application/json',
-    },
-  })
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const response = await fetch(url, { headers })
 
   if (!response.ok) {
     let errorBody = {}

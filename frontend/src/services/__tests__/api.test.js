@@ -4,6 +4,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildQueryString } from '../api.js'
 
+// vi.mock at top level — Vitest hoists this above static imports
+vi.mock('../auth.js', () => ({
+  acquireToken: vi.fn().mockResolvedValue('mock-token'),
+}))
+
 // ── buildQueryString ──────────────────────────────────────────────────────────
 
 describe('buildQueryString', () => {
@@ -50,10 +55,6 @@ describe('fetchProduction', () => {
 
   beforeEach(() => {
     originalFetch = global.fetch
-    // Mock acquireToken — api.js imports auth.js which calls acquireToken
-    vi.mock('../auth.js', () => ({
-      acquireToken: vi.fn().mockResolvedValue('mock-token'),
-    }))
   })
 
   afterEach(() => {
@@ -74,6 +75,22 @@ describe('fetchProduction', () => {
     const [url, options] = global.fetch.mock.calls[0]
     expect(url).toContain('/v1/production/regional')
     expect(options.headers.Authorization).toBe('Bearer mock-token')
+  })
+
+  it('omits Authorization header when token is empty', async () => {
+    const { acquireToken } = await import('../auth.js')
+    acquireToken.mockResolvedValueOnce('')
+
+    const { fetchProduction } = await import('../api.js')
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [], total_records: 0, request_id: 'req-empty' }),
+    })
+
+    await fetchProduction({ limit: 1 })
+
+    const [, options] = global.fetch.mock.calls[0]
+    expect(options.headers.Authorization).toBeUndefined()
   })
 
   it('passes limit to query string', async () => {
@@ -121,11 +138,9 @@ describe('fetchProduction', () => {
       json: async () => ({ message: 'Not found' }),
     })
 
-    try {
-      await fetchProduction()
-    } catch (err) {
-      expect(err).toBeInstanceOf(ApiError)
-      expect(err.status).toBe(404)
-    }
+    // Use .catch(e => e) to guarantee the assertion runs even if no exception thrown
+    const err = await fetchProduction().catch(e => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.status).toBe(404)
   })
 })

@@ -14,13 +14,15 @@ export function KPICard({ title, value, unit = '', trend, loading = false }) {
     <article className="glass-card kpi-card" data-testid="kpi-card">
       <header className="kpi-header">
         <span className="kpi-title">{title}</span>
-        {trend && <span className={`badge ${trendClass}`}>{trendIcon}</span>}
+        {trend !== undefined && (
+          <span className={`badge ${trendClass}`}>{trendIcon}</span>
+        )}
       </header>
 
       {loading ? (
         <div className="skeleton" style={{ height: '2rem', marginTop: '8px' }} data-testid="kpi-skeleton" />
       ) : (
-        <p className="kpi-value" data-testid="kpi-value">
+        <p className="kpi-value" data-testid="kpi-value" aria-live="polite">
           {value}
           {unit && <span className="kpi-unit"> {unit}</span>}
         </p>

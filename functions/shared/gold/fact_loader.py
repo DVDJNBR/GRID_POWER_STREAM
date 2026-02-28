@@ -132,16 +132,38 @@ class FactLoader:
                 # Temperature from ERA5 if available
                 temp = row.get("temperature_c") or row.get("temperature_moyenne")
 
-                cursor.execute(
-                    """INSERT INTO FACT_ENERGY_FLOW
-                       (id_date, id_region, id_source, valeur_mw, facteur_charge, temperature_moyenne)
-                       VALUES (?, ?, ?, ?, ?, ?)
-                       ON CONFLICT(id_date, id_region, id_source) DO UPDATE SET
-                           valeur_mw = excluded.valeur_mw,
-                           facteur_charge = excluded.facteur_charge,
-                           temperature_moyenne = excluded.temperature_moyenne""",
-                    (id_date, id_region, id_source, valeur_mw, facteur_charge, temp),
-                )
+                params = (id_date, id_region, id_source, valeur_mw, facteur_charge, temp)
+                if self.dim._is_sqlite:
+                    cursor.execute(
+                        """INSERT INTO FACT_ENERGY_FLOW
+                           (id_date, id_region, id_source, valeur_mw, facteur_charge, temperature_moyenne)
+                           VALUES (?, ?, ?, ?, ?, ?)
+                           ON CONFLICT(id_date, id_region, id_source) DO UPDATE SET
+                               valeur_mw = excluded.valeur_mw,
+                               facteur_charge = excluded.facteur_charge,
+                               temperature_moyenne = excluded.temperature_moyenne""",
+                        params,
+                    )
+                else:
+                    cursor.execute(
+                        """MERGE FACT_ENERGY_FLOW AS t
+                           USING (VALUES (?, ?, ?, ?, ?, ?))
+                               AS s(id_date, id_region, id_source,
+                                    valeur_mw, facteur_charge, temperature_moyenne)
+                           ON t.id_date = s.id_date
+                              AND t.id_region = s.id_region
+                              AND t.id_source = s.id_source
+                           WHEN MATCHED THEN UPDATE SET
+                               valeur_mw = s.valeur_mw,
+                               facteur_charge = s.facteur_charge,
+                               temperature_moyenne = s.temperature_moyenne
+                           WHEN NOT MATCHED THEN INSERT
+                               (id_date, id_region, id_source,
+                                valeur_mw, facteur_charge, temperature_moyenne)
+                               VALUES (s.id_date, s.id_region, s.id_source,
+                                       s.valeur_mw, s.facteur_charge, s.temperature_moyenne);""",
+                        params,
+                    )
                 rows_loaded += 1
 
         self.conn.commit()

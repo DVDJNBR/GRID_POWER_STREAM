@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/DVDJNBR/WATT_WATCHER/compare/v1.0.0...v1.1.0) (2026-02-28)
+
+### Features
+
+* **7.0:** Azure deployment — full pipeline, SWA, deploy workflow ([b600b20](https://github.com/DVDJNBR/WATT_WATCHER/commit/b600b20e1e437d1551d9ee667f73c7894118c68f))
+
 ## 1.0.0 (2026-02-28)
 
 ### Features

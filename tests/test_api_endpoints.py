@@ -194,9 +194,11 @@ class TestProductionService:
     def test_build_query_no_filters(self):
         sql, params = build_production_query()
         assert "FACT_ENERGY_FLOW" in sql
-        assert "LIMIT ? OFFSET ?" in sql
-        assert params[-2] == 100   # default limit
-        assert params[-1] == 0     # default offset
+        # OFFSET is applied in Python after aggregation, not in SQL
+        assert "LIMIT ?" in sql
+        assert "OFFSET ?" not in sql
+        # sql_limit = (offset=0 + limit=100) * 10 = 1000
+        assert params[-1] == 1000
 
     def test_build_query_with_region(self):
         sql, params = build_production_query(region_code="11")
@@ -216,8 +218,8 @@ class TestProductionService:
         assert "2025-06-01" in params
         assert "2025-06-30" in params
         assert "eolien" in params
-        assert params[-2] == 50
-        assert params[-1] == 10
+        # sql_limit = (offset=10 + limit=50) * 10 = 600; no OFFSET in SQL params
+        assert params[-1] == 600
 
     def test_aggregate_rows_pivot(self):
         """AC #3: sources dict is correctly built from flat rows."""
@@ -259,8 +261,12 @@ class TestProductionService:
         all_data = query_production(db, limit=100, offset=0)
         page1 = query_production(db, limit=1, offset=0)
         page2 = query_production(db, limit=1, offset=1)
-        assert page1["total_records"] == 1
-        assert page2["total_records"] == 1
+        # total_records = all aggregated non-zero records (consistent across pages)
+        assert page1["total_records"] == all_data["total_records"]
+        assert page2["total_records"] == all_data["total_records"]
+        # Each page returns exactly 1 record
+        assert len(page1["data"]) == 1
+        assert len(page2["data"]) == 1
         assert page1["data"][0] != page2["data"][0]
 
     def test_query_production_response_envelope(self, db):

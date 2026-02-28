@@ -213,11 +213,11 @@ _bmad/
 .gemini
 
 # Terraform
-infra/.terraform/
-infra/.terraform.lock.hcl
-infra/terraform.tfstate
-infra/terraform.tfstate.backup
-infra/terraform.tfvars
+.cloud/.terraform/
+.cloud/.terraform.lock.hcl
+.cloud/terraform.tfstate
+.cloud/terraform.tfstate.backup
+.cloud/terraform.tfvars
 
 # Local data (dev mode)
 bronze/

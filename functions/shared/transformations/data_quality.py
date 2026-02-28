@@ -29,17 +29,21 @@ class NullStrategy(str, Enum):
 
 
 # Default quality rules per source domain
+# MW columns use FLAG (not FILL_ZERO) — RTE returns null for time slots not yet
+# published ("données temps réel" arrives with ~15 min delay). Replacing null
+# with 0 would be misleading: it looks like zero production, not missing data.
+# fact_loader.py skips null MW values so FACT only contains real measurements.
 RTE_QUALITY_RULES: dict[str, NullStrategy] = {
     "consommation_mw": NullStrategy.FLAG,
-    "nucleaire_mw": NullStrategy.FILL_ZERO,
-    "eolien_mw": NullStrategy.FILL_ZERO,
-    "solaire_mw": NullStrategy.FILL_ZERO,
-    "hydraulique_mw": NullStrategy.FILL_ZERO,
-    "gaz_mw": NullStrategy.FILL_ZERO,
-    "charbon_mw": NullStrategy.FILL_ZERO,
-    "bioenergies_mw": NullStrategy.FILL_ZERO,
-    "fioul_mw": NullStrategy.FILL_ZERO,
-    "pompage_mw": NullStrategy.FILL_ZERO,
+    "nucleaire_mw": NullStrategy.FLAG,
+    "eolien_mw": NullStrategy.FLAG,
+    "solaire_mw": NullStrategy.FLAG,
+    "hydraulique_mw": NullStrategy.FLAG,
+    "gaz_mw": NullStrategy.FLAG,
+    "charbon_mw": NullStrategy.FLAG,
+    "bioenergies_mw": NullStrategy.FLAG,
+    "fioul_mw": NullStrategy.FLAG,
+    "pompage_mw": NullStrategy.FLAG,
     "date_heure": NullStrategy.DROP,
     "code_insee_region": NullStrategy.DROP,
 }

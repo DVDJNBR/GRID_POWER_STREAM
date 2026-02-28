@@ -139,15 +139,17 @@ class JWTValidator:
             resp.raise_for_status()
             self._jwks_cache = resp.json()
 
-        keys = self._jwks_cache.get("keys", [])
+        jwks = self._jwks_cache
+        assert jwks is not None
+        keys = jwks.get("keys", [])
 
         # Match by kid; fallback to first key if kid is absent
         for key_data in keys:
             if kid is None or key_data.get("kid") == kid:
-                return RSAAlgorithm.from_jwk(key_data)
+                return RSAAlgorithm.from_jwk(key_data)  # type: ignore[possibly-undefined]
 
         if keys:
-            return RSAAlgorithm.from_jwk(keys[0])
+            return RSAAlgorithm.from_jwk(keys[0])  # type: ignore[possibly-undefined]
 
         raise ValueError("No keys found in JWKS response")
 

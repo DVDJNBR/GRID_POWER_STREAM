@@ -41,18 +41,28 @@ def _get_db_connection() -> Any:
     """
     Return a Gold SQL DB connection.
 
-    Production: pyodbc with Managed Identity.
-    Local dev: falls back to environment variable SQL_CONNECTION_STRING.
+    Priority:
+    1. SQL_CONNECTION_STRING env var → pyodbc (Azure SQL in production)
+    2. LOCAL_GOLD_DB env var → sqlite3 (local dev, points to gold.db path)
+    3. Default → sqlite3 on gold.db in project root (local dev fallback)
     """
     conn_str = os.environ.get("SQL_CONNECTION_STRING", "")
-    if not conn_str:
-        raise EnvironmentError("SQL_CONNECTION_STRING not set")
+    if conn_str:
+        try:
+            import pyodbc  # type: ignore[import]
+            return pyodbc.connect(conn_str)
+        except ImportError as e:
+            raise RuntimeError("pyodbc not available — install it for Azure SQL") from e
 
-    try:
-        import pyodbc  # type: ignore[import]
-        return pyodbc.connect(conn_str)
-    except ImportError as e:
-        raise RuntimeError("pyodbc not available") from e
+    # Local dev fallback: sqlite3
+    import sqlite3
+    from pathlib import Path
+    local_db = os.environ.get(
+        "LOCAL_GOLD_DB",
+        str(Path(__file__).parent.parent / "gold.db"),
+    )
+    logger.info("SQL_CONNECTION_STRING not set — using local SQLite: %s", local_db)
+    return sqlite3.connect(local_db)
 
 
 # ─── Function App ───────────────────────────────────────────────────────────
@@ -157,6 +167,52 @@ if AZURE_FUNCTIONS_AVAILABLE:
         )
 
     # ── Story 4.3: Swagger UI (public) ───────────────────────────────────────
+
+    # ── Story 7.0: Manual pipeline trigger (Bronze → Silver → Gold) ─────────
+
+    @app.route(route="v1/admin/pipeline/run", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+    def run_pipeline_now(req: func.HttpRequest) -> func.HttpResponse:
+        """
+        POST /v1/admin/pipeline/run
+
+        Manual trigger for the full ETL pipeline: Bronze → Silver → Gold.
+        Auth level FUNCTION — requires x-functions-key header.
+        Accepts optional JSON body: {"minutes": 60, "backfill_days": 0}
+        """
+        request_id = str(uuid.uuid4())
+        try:
+            body = req.get_json() if req.get_body() else {}
+        except Exception:
+            body = {}
+
+        minutes = int(body.get("minutes", 30))
+        backfill_days = int(body.get("backfill_days", 0))
+
+        try:
+            result = run_full_pipeline(
+                job_id=request_id,
+                minutes=minutes,
+                backfill_days=backfill_days,
+            )
+            return func.HttpResponse(
+                json.dumps(result), status_code=200, mimetype="application/json",
+                headers={"X-Request-Id": request_id},
+            )
+        except Exception as exc:
+            logger.error("pipeline trigger error [%s]: %s", request_id, exc, exc_info=True)
+            body_err = server_error(request_id=request_id)
+            return func.HttpResponse(
+                json.dumps(body_err), status_code=500, mimetype="application/json",
+                headers={"X-Request-Id": request_id},
+            )
+
+    @app.route(route="v1/admin/pipeline/run", methods=["GET"], auth_level=func.AuthLevel.FUNCTION)
+    def pipeline_status(req: func.HttpRequest) -> func.HttpResponse:
+        """GET /v1/admin/pipeline/run — liveness check for pipeline endpoint."""
+        return func.HttpResponse(
+            json.dumps({"status": "ready", "endpoint": "POST /api/v1/admin/pipeline/run"}),
+            status_code=200, mimetype="application/json",
+        )
 
     @app.route(route=ROUTE_DOCS, methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
     def get_docs(req: func.HttpRequest) -> func.HttpResponse:
@@ -278,6 +334,119 @@ def run_ingestion(
             error=f"Unexpected: {e}",
             job_id=job_id,
         )
+
+
+def run_full_pipeline(
+    job_id: str | None = None,
+    local_mode: bool = False,
+    minutes: int = 30,
+    backfill_days: int = 0,
+) -> dict:
+    """
+    Full ETL pipeline: Bronze → Silver → Gold.
+
+    1. Ingest from RTE API → Bronze (ADLS or local)
+    2. Transform Bronze JSON → Silver Parquet (in-memory for Azure, local for dev)
+    3. Load Silver → Gold (Azure SQL or SQLite)
+
+    Args:
+        job_id: Trace ID.
+        local_mode: Use local filesystem instead of ADLS.
+        minutes: Lookback window for RTE API (default 30min).
+        backfill_days: If >0, fetch N days of historical data.
+    """
+    import sqlite3 as _sqlite3
+    from pathlib import Path as _Path
+    from functions.shared.transformations.rte_silver import transform_rte_to_silver
+    from functions.shared.gold.dim_loader import DimLoader
+    from functions.shared.gold.fact_loader import FactLoader
+
+    job_id = job_id or str(uuid.uuid4())
+    results: dict = {"job_id": job_id, "stages": {}}
+
+    # ── Stage 1: Bronze ingestion ────────────────────────────────────────────
+    logger.info("[%s] Stage 1: Bronze ingestion (minutes=%d, backfill_days=%d)",
+                job_id, minutes, backfill_days)
+    bronze_result = run_ingestion(job_id=job_id, local_mode=local_mode)
+    results["stages"]["bronze"] = bronze_result
+    logger.info("[%s] Bronze: %s (%d records)",
+                job_id, bronze_result.get("status"), bronze_result.get("record_count", 0))
+
+    if bronze_result.get("status") == "failure":
+        results["status"] = "failure"
+        results["failed_stage"] = "bronze"
+        return results
+
+    # ── Stage 2: Silver transformation ──────────────────────────────────────
+    logger.info("[%s] Stage 2: Silver transformation", job_id)
+    try:
+        storage_account = os.environ.get("STORAGE_ACCOUNT_NAME") if not local_mode else None
+        bronze = BronzeStorage(storage_account_name=storage_account, local_mode=local_mode)
+
+        bronze_files = bronze.list_recent_files(minutes=minutes + 5) if not local_mode else []
+
+        if local_mode:
+            # Local: read from filesystem
+            bronze_base = _Path(__file__).parent.parent / "bronze" / "rte" / "production"
+            bronze_files_paths = sorted(bronze_base.rglob("*.json"))
+            silver_base = _Path(__file__).parent.parent / "silver"
+            silver_base.mkdir(parents=True, exist_ok=True)
+            silver_rows = 0
+            for bf in bronze_files_paths:
+                res = transform_rte_to_silver(bf, silver_base)
+                silver_rows += res.get("rows_written", res.get("rows", 0))
+            results["stages"]["silver"] = {"status": "success", "rows": silver_rows}
+        else:
+            # Azure: transform the file just written to ADLS
+            bronze_path = bronze_result.get("details", {}).get("bronze_path", "")
+            if bronze_path:
+                res = transform_rte_to_silver(bronze_path, None, storage_account=storage_account)
+                results["stages"]["silver"] = res
+            else:
+                results["stages"]["silver"] = {"status": "skipped", "reason": "no bronze_path"}
+
+    except Exception as exc:
+        logger.error("[%s] Silver stage failed: %s", job_id, exc, exc_info=True)
+        results["stages"]["silver"] = {"status": "failure", "error": str(exc)}
+        results["status"] = "partial"
+        results["failed_stage"] = "silver"
+        return results
+
+    # ── Stage 3: Gold loading ────────────────────────────────────────────────
+    logger.info("[%s] Stage 3: Gold loading", job_id)
+    try:
+        conn = _get_db_connection()
+        is_sqlite = isinstance(conn, _sqlite3.Connection)
+
+        dim = DimLoader(conn)
+        if is_sqlite:
+            dim.ensure_schema()
+
+        fact = FactLoader(conn)
+
+        if local_mode:
+            silver_base = _Path(__file__).parent.parent / "silver"
+            gold_result = fact.load_from_silver(silver_base)
+        else:
+            silver_path = results["stages"]["silver"].get("silver_path", "")
+            gold_result = fact.load_from_silver(silver_path) if silver_path else {
+                "status": "skipped", "rows_loaded": 0
+            }
+
+        conn.close()
+        results["stages"]["gold"] = gold_result
+        logger.info("[%s] Gold: %s (%d rows)",
+                    job_id, gold_result.get("status"), gold_result.get("rows_loaded", 0))
+
+    except Exception as exc:
+        logger.error("[%s] Gold stage failed: %s", job_id, exc, exc_info=True)
+        results["stages"]["gold"] = {"status": "failure", "error": str(exc)}
+        results["status"] = "partial"
+        results["failed_stage"] = "gold"
+        return results
+
+    results["status"] = "success"
+    return results
 
 
 # ─── Local dev entry point ──────────────────────────────────────────────────

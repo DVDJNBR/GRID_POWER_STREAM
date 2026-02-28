@@ -237,6 +237,17 @@ resource "azurerm_application_insights" "main" {
 }
 
 # ─── SQL Schema Initialization ──────────────────────────────────────────────
+# ─── Azure Static Web App (frontend) ────────────────────────────────────────
+resource "azurerm_static_web_app" "frontend" {
+  name                = "${local.prefix}-swa"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "westeurope"  # SWA available regions differ; westeurope covers FR
+  sku_tier            = "Free"
+  sku_size            = "Free"
+
+  tags = local.tags
+}
+
 resource "null_resource" "sql_schema" {
   triggers = {
     schema_hash = filesha256("${path.module}/sql/init_schema.sql")

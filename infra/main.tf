@@ -1,0 +1,274 @@
+# -----------------------------------------------------------------------------
+# GRID_POWER_STREAM — Main Infrastructure
+# Story 1.0: IaC with Terraform
+# -----------------------------------------------------------------------------
+
+locals {
+  prefix = "${var.project_name}-${var.environment}"
+  tags = {
+    project     = "GRID_POWER_STREAM"
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+}
+
+data "azurerm_client_config" "current" {}
+
+# ─── Resource Group ──────────────────────────────────────────────────────────
+resource "azurerm_resource_group" "main" {
+  name     = "${local.prefix}-rg"
+  location = var.location
+  tags     = local.tags
+}
+
+# ─── ADLS Gen2 Storage Account ──────────────────────────────────────────────
+resource "azurerm_storage_account" "datalake" {
+  name                     = replace("${local.prefix}sa", "-", "")  # no hyphens allowed
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  account_kind             = "StorageV2"
+  is_hns_enabled           = true  # Hierarchical Namespace = ADLS Gen2
+
+  tags = local.tags
+}
+
+# ADLS containers
+resource "azurerm_storage_container" "bronze" {
+  name                  = "bronze"
+  storage_account_name  = azurerm_storage_account.datalake.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "silver" {
+  name                  = "silver"
+  storage_account_name  = azurerm_storage_account.datalake.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "gold" {
+  name                  = "gold"
+  storage_account_name  = azurerm_storage_account.datalake.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "audit" {
+  name                  = "audit"
+  storage_account_name  = azurerm_storage_account.datalake.name
+  container_access_type = "private"
+}
+
+# ─── ADLS Lifecycle Policies (Data Retention) ───────────────────────────────
+resource "azurerm_storage_management_policy" "retention" {
+  storage_account_id = azurerm_storage_account.datalake.id
+
+  rule {
+    name    = "bronze-retention"
+    enabled = true
+    filters {
+      prefix_match = ["bronze/"]
+      blob_types   = ["blockBlob"]
+    }
+    actions {
+      base_blob {
+        delete_after_days_since_modification_greater_than = var.retention_bronze_days
+      }
+    }
+  }
+
+  rule {
+    name    = "silver-retention"
+    enabled = true
+    filters {
+      prefix_match = ["silver/"]
+      blob_types   = ["blockBlob"]
+    }
+    actions {
+      base_blob {
+        delete_after_days_since_modification_greater_than = var.retention_silver_days
+      }
+    }
+  }
+
+  rule {
+    name    = "audit-retention"
+    enabled = true
+    filters {
+      prefix_match = ["audit/"]
+      blob_types   = ["blockBlob"]
+    }
+    actions {
+      base_blob {
+        delete_after_days_since_modification_greater_than = var.retention_audit_days
+      }
+    }
+  }
+}
+
+# ─── Azure SQL Serverless ───────────────────────────────────────────────────
+resource "azurerm_mssql_server" "main" {
+  name                         = "${local.prefix}-sql"
+  resource_group_name          = azurerm_resource_group.main.name
+  location                     = azurerm_resource_group.main.location
+  version                      = "12.0"
+  administrator_login          = var.sql_admin_login
+  administrator_login_password = var.sql_admin_password
+
+  tags = local.tags
+}
+
+resource "azurerm_mssql_database" "warehouse" {
+  name      = "${local.prefix}-db"
+  server_id = azurerm_mssql_server.main.id
+  sku_name  = "GP_S_Gen5_1"  # Serverless Gen5, 1 vCore
+
+  auto_pause_delay_in_minutes = var.sql_auto_pause_delay
+  min_capacity                = 0.5
+  max_size_gb                 = 32
+
+  tags = local.tags
+}
+
+# SQL firewall — allow Azure services
+resource "azurerm_mssql_firewall_rule" "azure_services" {
+  name             = "AllowAzureServices"
+  server_id        = azurerm_mssql_server.main.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "0.0.0.0"
+}
+
+# ─── Azure Key Vault ────────────────────────────────────────────────────────
+resource "azurerm_key_vault" "main" {
+  name                       = "${local.prefix}-kv"
+  resource_group_name        = azurerm_resource_group.main.name
+  location                   = azurerm_resource_group.main.location
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  soft_delete_retention_days = 7
+  purge_protection_enabled   = false  # dev only — enable in prod
+
+  # Allow deploying user to manage secrets
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = data.azurerm_client_config.current.object_id
+
+    secret_permissions = ["Get", "Set", "List", "Delete", "Purge"]
+  }
+
+  tags = local.tags
+}
+
+# ─── Azure Function App (Consumption Plan) ──────────────────────────────────
+resource "azurerm_service_plan" "functions" {
+  name                = "${local.prefix}-plan"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  os_type             = "Linux"
+  sku_name            = "Y1"  # Consumption plan
+
+  tags = local.tags
+}
+
+resource "azurerm_storage_account" "functions" {
+  name                     = replace("${local.prefix}funcsa", "-", "")
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+
+  tags = local.tags
+}
+
+resource "azurerm_linux_function_app" "main" {
+  name                       = "${local.prefix}-func"
+  resource_group_name        = azurerm_resource_group.main.name
+  location                   = azurerm_resource_group.main.location
+  service_plan_id            = azurerm_service_plan.functions.id
+  storage_account_name       = azurerm_storage_account.functions.name
+  storage_account_access_key = azurerm_storage_account.functions.primary_access_key
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  site_config {
+    application_stack {
+      python_version = "3.11"
+    }
+  }
+
+  app_settings = {
+    "KEY_VAULT_URL"        = azurerm_key_vault.main.vault_uri
+    "STORAGE_ACCOUNT_NAME" = azurerm_storage_account.datalake.name
+    "SQL_SERVER"           = azurerm_mssql_server.main.fully_qualified_domain_name
+    "SQL_DATABASE"         = azurerm_mssql_database.warehouse.name
+  }
+
+  tags = local.tags
+}
+
+# ─── RBAC Assignments ───────────────────────────────────────────────────────
+
+# Function → ADLS Gen2: Storage Blob Data Contributor
+resource "azurerm_role_assignment" "func_storage" {
+  scope                = azurerm_storage_account.datalake.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_linux_function_app.main.identity[0].principal_id
+}
+
+# Function → Key Vault: Secrets User
+resource "azurerm_key_vault_access_policy" "func_kv" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_linux_function_app.main.identity[0].principal_id
+
+  secret_permissions = ["Get", "List"]
+}
+
+# ─── Application Insights ───────────────────────────────────────────────────
+resource "azurerm_application_insights" "main" {
+  name                = "${local.prefix}-ai"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  application_type    = "other"
+
+  tags = local.tags
+}
+
+# ─── SQL Schema Initialization ──────────────────────────────────────────────
+resource "null_resource" "sql_schema" {
+  triggers = {
+    schema_hash = filesha256("${path.module}/sql/init_schema.sql")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      sqlcmd -S ${azurerm_mssql_server.main.fully_qualified_domain_name} \
+             -d ${azurerm_mssql_database.warehouse.name} \
+             -U ${var.sql_admin_login} \
+             -P '${var.sql_admin_password}' \
+             -i ${path.module}/sql/init_schema.sql
+    EOT
+  }
+
+  depends_on = [azurerm_mssql_database.warehouse, azurerm_mssql_firewall_rule.azure_services]
+}
+
+resource "null_resource" "sql_seed" {
+  triggers = {
+    seed_hash = filesha256("${path.module}/sql/seed_dimensions.sql")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      sqlcmd -S ${azurerm_mssql_server.main.fully_qualified_domain_name} \
+             -d ${azurerm_mssql_database.warehouse.name} \
+             -U ${var.sql_admin_login} \
+             -P '${var.sql_admin_password}' \
+             -i ${path.module}/sql/seed_dimensions.sql
+    EOT
+  }
+
+  depends_on = [null_resource.sql_schema]
+}

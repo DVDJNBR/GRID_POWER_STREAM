@@ -38,3 +38,19 @@ output "application_insights_connection_string" {
   value       = azurerm_application_insights.main.connection_string
   sensitive   = true
 }
+
+output "static_web_app_url" {
+  description = "Frontend URL — set as VITE_API_BASE_URL in GitHub Actions"
+  value       = "https://${azurerm_static_web_app.frontend.default_host_name}"
+}
+
+output "static_web_app_api_token" {
+  description = "SWA deploy token — add as AZURE_STATIC_WEB_APPS_API_TOKEN in GitHub secrets"
+  value       = azurerm_static_web_app.frontend.api_key
+  sensitive   = true
+}
+
+output "function_app_url" {
+  description = "Azure Functions base URL — use as VITE_API_BASE_URL in frontend"
+  value       = "https://${azurerm_linux_function_app.main.default_hostname}"
+}

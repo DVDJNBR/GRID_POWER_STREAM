@@ -23,8 +23,17 @@ class DimLoader:
         self._is_sqlite = isinstance(db_connection, sqlite3.Connection)
 
     def ensure_schema(self) -> None:
-        """Create Gold Star Schema tables if they don't exist (dev mode)."""
+        """Create Gold Star Schema tables if they don't exist (SQLite dev mode only).
+
+        In production (Azure SQL), the schema is applied by Terraform via sqlcmd.
+        This method is a no-op for non-SQLite connections.
+        """
+        if not self._is_sqlite:
+            logger.info("Skipping ensure_schema — Azure SQL schema managed by Terraform")
+            return
+
         cursor = self.conn.cursor()
+        # executescript() is SQLite-specific; safe here because _is_sqlite=True
         cursor.executescript("""
             CREATE TABLE IF NOT EXISTS DIM_REGION (
                 id_region INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +73,7 @@ class DimLoader:
             );
         """)
         self.conn.commit()
-        logger.info("Gold schema ensured")
+        logger.info("Gold schema ensured (SQLite)")
 
     def upsert_regions(self, regions: list[dict]) -> int:
         """
@@ -79,16 +88,34 @@ class DimLoader:
         cursor = self.conn.cursor()
         count = 0
         for r in regions:
-            cursor.execute(
-                """INSERT INTO DIM_REGION (code_insee, nom_region, population, superficie_km2)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(code_insee) DO UPDATE SET
-                       nom_region = excluded.nom_region,
-                       population = excluded.population,
-                       superficie_km2 = excluded.superficie_km2""",
-                (r["code_insee"], r["nom_region"],
-                 r.get("population"), r.get("superficie_km2")),
-            )
+            if self._is_sqlite:
+                cursor.execute(
+                    """INSERT INTO DIM_REGION (code_insee, nom_region, population, superficie_km2)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(code_insee) DO UPDATE SET
+                           nom_region = excluded.nom_region,
+                           population = excluded.population,
+                           superficie_km2 = excluded.superficie_km2""",
+                    (r["code_insee"], r["nom_region"],
+                     r.get("population"), r.get("superficie_km2")),
+                )
+            else:
+                # T-SQL MERGE for Azure SQL
+                cursor.execute(
+                    """MERGE DIM_REGION AS t
+                       USING (VALUES (?, ?, ?, ?))
+                           AS s(code_insee, nom_region, population, superficie_km2)
+                       ON t.code_insee = s.code_insee
+                       WHEN MATCHED THEN UPDATE SET
+                           nom_region = s.nom_region,
+                           population = s.population,
+                           superficie_km2 = s.superficie_km2
+                       WHEN NOT MATCHED THEN INSERT
+                           (code_insee, nom_region, population, superficie_km2)
+                           VALUES (s.code_insee, s.nom_region, s.population, s.superficie_km2);""",
+                    (r["code_insee"], r["nom_region"],
+                     r.get("population"), r.get("superficie_km2")),
+                )
             count += 1
         self.conn.commit()
         logger.info("Upserted %d regions", count)
@@ -109,15 +136,30 @@ class DimLoader:
             except (ValueError, AttributeError):
                 continue
 
-            cursor.execute(
-                """INSERT INTO DIM_TIME (horodatage, jour, mois, annee, heure, jour_semaine, est_weekend)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(horodatage) DO NOTHING""",
-                (
-                    ts_str, ts.day, ts.month, ts.year, ts.hour,
-                    ts.isoweekday(), 1 if ts.isoweekday() >= 6 else 0,
-                ),
+            params = (
+                ts_str, ts.day, ts.month, ts.year, ts.hour,
+                ts.isoweekday(), 1 if ts.isoweekday() >= 6 else 0,
             )
+            if self._is_sqlite:
+                cursor.execute(
+                    """INSERT INTO DIM_TIME
+                       (horodatage, jour, mois, annee, heure, jour_semaine, est_weekend)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(horodatage) DO NOTHING""",
+                    params,
+                )
+            else:
+                cursor.execute(
+                    """MERGE DIM_TIME AS t
+                       USING (VALUES (?, ?, ?, ?, ?, ?, ?))
+                           AS s(horodatage, jour, mois, annee, heure, jour_semaine, est_weekend)
+                       ON t.horodatage = s.horodatage
+                       WHEN NOT MATCHED THEN INSERT
+                           (horodatage, jour, mois, annee, heure, jour_semaine, est_weekend)
+                           VALUES (s.horodatage, s.jour, s.mois, s.annee,
+                                   s.heure, s.jour_semaine, s.est_weekend);""",
+                    params,
+                )
             count += 1
         self.conn.commit()
         logger.info("Upserted %d time entries", count)
@@ -144,13 +186,24 @@ class DimLoader:
         cursor = self.conn.cursor()
         count = 0
         for s in sources:
-            cursor.execute(
-                """INSERT INTO DIM_SOURCE (source_name, is_green)
-                   VALUES (?, ?)
-                   ON CONFLICT(source_name) DO UPDATE SET
-                       is_green = excluded.is_green""",
-                (s["source_name"], s["is_green"]),
-            )
+            if self._is_sqlite:
+                cursor.execute(
+                    """INSERT INTO DIM_SOURCE (source_name, is_green)
+                       VALUES (?, ?)
+                       ON CONFLICT(source_name) DO UPDATE SET
+                           is_green = excluded.is_green""",
+                    (s["source_name"], s["is_green"]),
+                )
+            else:
+                cursor.execute(
+                    """MERGE DIM_SOURCE AS t
+                       USING (VALUES (?, ?)) AS s(source_name, is_green)
+                       ON t.source_name = s.source_name
+                       WHEN MATCHED THEN UPDATE SET is_green = s.is_green
+                       WHEN NOT MATCHED THEN INSERT (source_name, is_green)
+                           VALUES (s.source_name, s.is_green);""",
+                    (s["source_name"], s["is_green"]),
+                )
             count += 1
         self.conn.commit()
         logger.info("Upserted %d sources", count)

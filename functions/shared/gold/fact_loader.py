@@ -98,9 +98,15 @@ class FactLoader:
         rows_loaded = 0
         cursor = self.conn.cursor()
 
+        # Pre-compute timestamp strings in Polars Utf8 format to match what
+        # DIM_TIME.horodatage stores (avoids Python datetime str() format mismatch).
+        df = df.with_columns(
+            pl.col("date_heure").cast(pl.Utf8).alias("_ts_str")
+        )
+
         for row in df.iter_rows(named=True):
             region_code = str(row.get("code_insee_region", ""))
-            timestamp = str(row.get("date_heure", ""))
+            timestamp = row.get("_ts_str", "")
 
             id_region = self.dim.get_region_id(region_code)
             id_date = self.dim.get_time_id(timestamp)

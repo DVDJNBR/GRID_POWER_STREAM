@@ -50,9 +50,13 @@ export function _resetMsalInstance() {
  * Acquire a Bearer token silently; fall back to interaction if needed.
  * AC #4: Seamless SSO — silent acquisition first.
  *
+ * Set VITE_SKIP_AUTH=true in .env.local to bypass MSAL for local dev.
+ *
  * @returns {Promise<string>} Access token, or '' if redirect was triggered
  */
 export async function acquireToken() {
+  if (import.meta.env.VITE_SKIP_AUTH === 'true') return ''
+
   const msal = await getMsalInstance()
 
   const accounts = msal.getAllAccounts()

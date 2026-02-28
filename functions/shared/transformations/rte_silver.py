@@ -145,7 +145,9 @@ def _load_json_file(path: Path) -> pl.DataFrame:
         records = data
     else:
         records = [data]
-    return pl.DataFrame(records)
+    # infer_schema_length=None: scan all rows before inferring types
+    # needed for Bronze JSON where some MW columns start as null then become numeric
+    return pl.DataFrame(records, infer_schema_length=None)
 
 
 def _write_hive_partitioned(

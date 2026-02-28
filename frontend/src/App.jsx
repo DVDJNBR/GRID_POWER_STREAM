@@ -77,17 +77,17 @@ export default function App() {
     }
   }, [])
 
-  // Initial load: fetch regions + production data in parallel (AC #1)
+  // Initial load: fetch regions, then auto-select first region (AC #1)
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setLoading(true)
-      const [, regsResult] = await Promise.allSettled([
-        loadData(''),
-        fetchRegions(),
-      ])
+      const regsResult = await fetchRegions().catch(() => [])
       if (!cancelled) {
-        if (regsResult.status === 'fulfilled') setRegions(regsResult.value)
+        setRegions(regsResult)
+        const defaultRegion = regsResult[0]?.code_insee || ''
+        setSelectedRegion(defaultRegion)
+        await loadData(defaultRegion)
         setLoading(false)
       }
     })()

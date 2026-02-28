@@ -238,16 +238,21 @@ class MockRequest:
         self._auth_claims: dict | None = None
 
 
-def _make_mock_handler(return_value: Any = None):
+class MockHandler:
+    """Handler that records calls with a typed .calls attribute."""
+
+    def __init__(self, return_value: Any = None) -> None:
+        self.calls: list[Any] = []
+        self._return_value = return_value
+
+    def __call__(self, req: Any) -> Any:
+        self.calls.append(req)
+        return self._return_value or {"status_code": 200, "body": "ok"}
+
+
+def _make_mock_handler(return_value: Any = None) -> MockHandler:
     """Create a simple handler that records whether it was called."""
-    calls = []
-
-    def handler(req):
-        calls.append(req)
-        return return_value or {"status_code": 200, "body": "ok"}
-
-    handler.calls = calls  # type: ignore[attr-defined]
-    return handler
+    return MockHandler(return_value)
 
 
 class TestRequireAuthDecorator:

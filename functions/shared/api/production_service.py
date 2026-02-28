@@ -31,6 +31,10 @@ def build_production_query(
 
     Returns (sql, params). Uses ? placeholders (pyodbc / sqlite3 compatible).
     AC #2: Parameterized → query plan caching, index usage.
+
+    Note: LIMIT is applied on raw rows (one per source). Multiply by 10 to
+    ensure enough rows are fetched before aggregation into (region, timestamp)
+    records. Final pagination is applied in query_production() after aggregation.
     """
     where_clauses: list[str] = []
     params: list[Any] = []
@@ -53,6 +57,10 @@ def build_production_query(
 
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
+    # Multiply SQL LIMIT by 10 (max ~8 sources per aggregated record) so that
+    # enough raw rows are fetched to build `limit` aggregated records after pivot.
+    sql_limit = (offset + limit) * 10
+
     sql = f"""
         SELECT
             r.code_insee,
@@ -66,10 +74,10 @@ def build_production_query(
         JOIN DIM_TIME t ON f.id_date = t.id_date
         JOIN DIM_SOURCE s ON f.id_source = s.id_source
         {where}
-        ORDER BY t.horodatage DESC, r.code_insee
-        LIMIT ? OFFSET ?
+        ORDER BY t.horodatage ASC, r.code_insee
+        LIMIT ?
     """
-    params.extend([limit, offset])
+    params.append(sql_limit)
     return sql, params
 
 
@@ -136,14 +144,22 @@ def query_production(
 
     data = _aggregate_rows(rows, cols)
 
+    # Filter out records where all sources are 0 (RTE nulls filled by quality rules =
+    # "data not yet available" slots — not actual zero-production measurements)
+    data = [r for r in data if any(v != 0 for v in r["sources"].values())]
+
+    # Apply pagination on aggregated records (not on raw rows)
+    total = len(data)
+    data = data[offset: offset + limit]
+
     logger.debug(
-        "production query: region=%s, start=%s, end=%s → %d records [req=%s]",
-        region_code, start_date, end_date, len(data), request_id,
+        "production query: region=%s, start=%s, end=%s → %d/%d records [req=%s]",
+        region_code, start_date, end_date, len(data), total, request_id,
     )
 
     return {
         "request_id": request_id,
-        "total_records": len(data),
+        "total_records": total,
         "limit": limit,
         "offset": offset,
         "data": data,
